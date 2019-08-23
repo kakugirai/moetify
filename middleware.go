@@ -7,7 +7,6 @@ import (
 )
 
 type Middleware struct {
-
 }
 
 // LoggingHandler logs the http request time

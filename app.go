@@ -11,8 +11,9 @@ import (
 )
 
 type App struct {
-	Router *mux.Router
+	Router      *mux.Router
 	Middlewares *Middleware
+	config      *Env
 }
 
 type shortenReq struct {
@@ -24,8 +25,9 @@ type shortlinkRes struct {
 	Shortlink string `json:"shortlink"`
 }
 
-func (a *App) Initialize() {
+func (a *App) Initialize(e *Env) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	a.config = e
 	a.Router = mux.NewRouter()
 	a.Middlewares = &Middleware{}
 	a.InitializeRoutes()
