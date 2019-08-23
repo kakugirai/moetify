@@ -6,11 +6,15 @@ import (
 	"strconv"
 )
 
-type Env struct {
-	S Storage
+type RedisEnv struct {
+	RS RedisStorage
 }
 
-func getEnv() *Env {
+type AppEnv struct {
+	Addr string
+}
+
+func getRedisEnv() *RedisEnv {
 	addr := os.Getenv("APP_REDIS_ADDR")
 	if addr == "" {
 		addr = "localhost:6379"
@@ -32,5 +36,13 @@ func getEnv() *Env {
 	log.Printf("connect to redis (addr: %s, password: %s, db: %d)", addr, passwd, db)
 
 	r := NewRedisCli(addr, passwd, db)
-	return &Env{S: r}
+	return &RedisEnv{RS: r}
+}
+
+func getAppEnv() AppEnv {
+	addr := os.Getenv("APP_ADDR")
+	if addr == "" {
+		addr = "0.0.0.0:8080"
+	}
+	return AppEnv{Addr: addr}
 }

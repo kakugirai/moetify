@@ -13,7 +13,7 @@ import (
 type App struct {
 	Router      *mux.Router
 	Middlewares *Middleware
-	config      *Env
+	Config      *RedisEnv
 }
 
 type shortenReq struct {
@@ -25,9 +25,15 @@ type shortlinkRes struct {
 	Shortlink string `json:"shortlink"`
 }
 
-func (a *App) Initialize(e *Env) {
+type Response struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Content interface{} `json:"content"`
+}
+
+func (a *App) Initialize(e *RedisEnv) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	a.config = e
+	a.Config = e
 	a.Router = mux.NewRouter()
 	a.Middlewares = &Middleware{}
 	a.InitializeRoutes()
@@ -59,18 +65,34 @@ func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	fmt.Printf("%v", req)
+
+	s, err := a.Config.RS.Shorten(req.URL, req.ExpirationInMinutes)
+	if err != nil {
+		respondWithError(w, err)
+	} else {
+		respondWithJSON(w, http.StatusCreated, shortlinkRes{Shortlink: s})
+	}
 }
 
 func (a App) getShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 	vals := r.URL.Query()
 	s := vals.Get("shortlink")
-	fmt.Printf("%s\n", s)
+	d, err := a.Config.RS.ShortLinkInfo(s)
+	if err != nil {
+		respondWithError(w, err)
+	} else {
+		respondWithJSON(w, http.StatusOK, d)
+	}
 }
 
 func (a App) redirect(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	fmt.Printf("%s\n", vars["shortlink"])
+	u, err := a.Config.RS.Unshorten(vars["shortlink"])
+	if err != nil {
+		respondWithError(w, err)
+	} else {
+		http.Redirect(w, r, u, http.StatusTemporaryRedirect)
+	}
 }
 
 func (a *App) Run(addr string) {
@@ -87,9 +109,9 @@ func respondWithError(w http.ResponseWriter, err error) {
 	}
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	res, _ := json.Marshal(payload)
+func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
+	resp, _ := json.Marshal(Response{Code: status, Message: http.StatusText(status), Content: payload})
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(res)
+	w.WriteHeader(status)
+	_, _ = w.Write(resp)
 }

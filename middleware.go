@@ -26,9 +26,10 @@ func (m Middleware) RecoverHandler(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("Recover from panic: %+v", err)
-				http.Error(w, http.StatusText(500), 500)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 		}()
+		next.ServeHTTP(w, r)
 	}
 	return http.HandlerFunc(fn)
 }

@@ -21,7 +21,7 @@ const (
 	ShortlinkDetailKey = "shortlink:%s:detail"
 )
 
-// RedisClient is a redis client
+// RedisCli is a redis client
 type RedisCli struct {
 	Cli *redis.Client
 }
