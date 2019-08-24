@@ -52,7 +52,7 @@ func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, StatusError{
 			http.StatusBadRequest,
 			fmt.Errorf("parse parameters failed %v", r.Body),
-		})
+		}, nil)
 		return
 	}
 
@@ -60,15 +60,14 @@ func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, StatusError{
 			http.StatusBadRequest,
 			fmt.Errorf("validate parameters failed %v", req),
-		})
+		}, nil)
 		return
 	}
 	defer r.Body.Close()
 
-
 	s, err := a.Config.RS.Shorten(req.URL, req.ExpirationInMinutes)
 	if err != nil {
-		respondWithError(w, err)
+		respondWithError(w, err, nil)
 	} else {
 		respondWithJSON(w, http.StatusCreated, shortlinkRes{Shortlink: s})
 	}
@@ -79,7 +78,7 @@ func (a App) getShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 	s := vals.Get("shortlink")
 	d, err := a.Config.RS.ShortLinkInfo(s)
 	if err != nil {
-		respondWithError(w, err)
+		respondWithError(w, err, nil)
 	} else {
 		respondWithJSON(w, http.StatusOK, d)
 	}
@@ -89,7 +88,7 @@ func (a App) redirect(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	u, err := a.Config.RS.Unshorten(vars["shortlink"])
 	if err != nil {
-		respondWithError(w, err)
+		respondWithError(w, err, nil)
 	} else {
 		http.Redirect(w, r, u, http.StatusTemporaryRedirect)
 	}
@@ -99,13 +98,15 @@ func (a *App) Run(addr string) {
 	log.Fatal(http.ListenAndServe(addr, a.Router))
 }
 
-func respondWithError(w http.ResponseWriter, err error) {
+func respondWithError(w http.ResponseWriter, err error, payload interface{}) {
 	switch e := err.(type) {
 	case Error:
 		log.Printf("HTTP %d - %s", e.Status(), e)
-		respondWithJSON(w, e.Status(), e.Error())
+		resp, _ := json.Marshal(Response{Code: e.Status(), Message: e.Error(), Content: payload})
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(resp)
 	default:
-		respondWithJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithJSON(w, http.StatusInternalServerError, payload)
 	}
 }
 
