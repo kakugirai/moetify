@@ -1,4 +1,4 @@
-package app
+package error
 
 type Error interface {
 	error
