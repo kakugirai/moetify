@@ -1,4 +1,4 @@
-package main
+package app
 
 type RedisStorage interface {
 	Shorten(url string, exp int64) (string, error)

@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"log"
@@ -7,14 +7,16 @@ import (
 )
 
 type RedisEnv struct {
-	RS RedisStorage
+	Addr     string
+	Password string
+	DB       int
 }
 
 type AppEnv struct {
 	Addr string
 }
 
-func getRedisEnv() *RedisEnv {
+func GetRedisEnv() RedisEnv {
 	addr := os.Getenv("APP_REDIS_ADDR")
 	if addr == "" {
 		addr = "localhost:6379"
@@ -33,13 +35,15 @@ func getRedisEnv() *RedisEnv {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("connect to redis (addr: %s, password: %s, db: %d)", addr, passwd, db)
 
-	r := NewRedisCli(addr, passwd, db)
-	return &RedisEnv{RS: r}
+	return RedisEnv{
+		addr,
+		passwd,
+		db,
+	}
 }
 
-func getAppEnv() AppEnv {
+func GetAppEnv() AppEnv {
 	addr := os.Getenv("APP_ADDR")
 	if addr == "" {
 		addr = "0.0.0.0:8080"

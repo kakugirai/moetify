@@ -1,10 +1,11 @@
-package main
+package app
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/justinas/alice"
+	"github.com/kakugirai/moetify/config"
+	"github.com/urfave/negroni"
 	"gopkg.in/validator.v2"
 	"log"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 type App struct {
 	Router      *mux.Router
 	Middlewares *Middleware
-	Config      *RedisEnv
+	RS          RedisStorage
 }
 
 type shortenReq struct {
@@ -31,19 +32,20 @@ type Response struct {
 	Content interface{} `json:"content"`
 }
 
-func (a *App) Initialize(e *RedisEnv) {
+func (a *App) Initialize(e config.RedisEnv) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	a.Config = e
+	addr, passwd, db := config.GetRedisEnv().Addr, config.GetRedisEnv().Password, config.GetRedisEnv().DB
+	log.Printf("connect to redis (addr: %s, password: %s, db: %d)", addr, passwd, db)
+	a.RS = NewRedisCli(addr, passwd, db)
 	a.Router = mux.NewRouter()
 	a.Middlewares = &Middleware{}
 	a.InitializeRoutes()
 }
 
 func (a App) InitializeRoutes() {
-	m := alice.New(a.Middlewares.LoggingHandler, a.Middlewares.RecoverHandler)
-	a.Router.Handle("/api/shorten", m.ThenFunc(a.createShortlink)).Methods("POST")
-	a.Router.Handle("/api/info", m.ThenFunc(a.getShortlinkInfo)).Methods("GET")
-	a.Router.Handle("/{shortlink:[a-zA-Z0-9]{1,11}}", m.ThenFunc(a.redirect)).Methods("GET")
+	a.Router.HandleFunc("/api/shorten", a.createShortlink).Methods("POST")
+	a.Router.HandleFunc("/api/info", a.getShortlinkInfo).Methods("GET")
+	a.Router.HandleFunc("/{shortlink:[a-zA-Z0-9]{1,11}}", a.redirect).Methods("GET")
 }
 
 func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +65,11 @@ func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
 		}, nil)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		_ = r.Body.Close()
+	}()
 
-	s, err := a.Config.RS.Shorten(req.URL, req.ExpirationInMinutes)
+	s, err := a.RS.Shorten(req.URL, req.ExpirationInMinutes)
 	if err != nil {
 		respondWithError(w, err, nil)
 	} else {
@@ -76,7 +80,7 @@ func (a App) createShortlink(w http.ResponseWriter, r *http.Request) {
 func (a App) getShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 	vals := r.URL.Query()
 	s := vals.Get("shortlink")
-	d, err := a.Config.RS.ShortLinkInfo(s)
+	d, err := a.RS.ShortLinkInfo(s)
 	if err != nil {
 		respondWithError(w, err, nil)
 	} else {
@@ -86,7 +90,7 @@ func (a App) getShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 
 func (a App) redirect(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	u, err := a.Config.RS.Unshorten(vars["shortlink"])
+	u, err := a.RS.Unshorten(vars["shortlink"])
 	if err != nil {
 		respondWithError(w, err, nil)
 	} else {
@@ -95,7 +99,13 @@ func (a App) redirect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) Run(addr string) {
-	log.Fatal(http.ListenAndServe(addr, a.Router))
+	n := negroni.New()
+	//n.Use(negroni.HandlerFunc(a.Middlewares.LoggingHandler))
+	n.Use(negroni.NewLogger())
+	n.Use(negroni.NewRecovery())
+	n.UseHandler(a.Router)
+	n.Run(addr)
+	//log.Fatal(http.ListenAndServe(addr, a.Router))
 }
 
 func respondWithError(w http.ResponseWriter, err error, payload interface{}) {

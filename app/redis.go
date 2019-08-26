@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -56,7 +56,7 @@ func toHash(url string) string {
 }
 
 // Shorten convert url to shortlink
-func (r RedisCli) Shorten(url string, exp int64) (string, error) {
+func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	// convert url to sha1 hash
 	h := toHash(url)
 
