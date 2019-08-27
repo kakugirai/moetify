@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/go-redis/redis"
 	myerror "github.com/kakugirai/moetify/app/error"
 	"github.com/mattheath/base62"
 	"github.com/speps/go-hashids"
-	"time"
 )
 
 const (
@@ -34,7 +35,7 @@ type URLDetail struct {
 	ExpirationInMinutes time.Duration `json:"expiration_in_minutes"`
 }
 
-// NewRedisClient creates a new redis client
+// NewRedisCli creates a new redis client
 func NewRedisCli(addr string, passwd string, db int) *RedisCli {
 	c := redis.NewClient(&redis.Options{
 		Addr:     addr,
@@ -117,7 +118,8 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	return eid, nil
 }
 
-func (r *RedisCli) ShortLinkInfo(eid string) (interface{}, error) {
+// ShortLiwnkInfo gets ShortlinkDetailKey from redis
+func (r *RedisCli) ShortLiwnkInfo(eid string) (interface{}, error) {
 	d, err := r.Cli.Get(fmt.Sprintf(ShortlinkDetailKey, eid)).Result()
 	if err == redis.Nil {
 		return "", myerror.StatusError{404, errors.New("Unknown short URL")}
@@ -128,6 +130,7 @@ func (r *RedisCli) ShortLinkInfo(eid string) (interface{}, error) {
 	}
 }
 
+// Unshorten gets ShortlinkKey from redis
 func (r *RedisCli) Unshorten(eid string) (string, error) {
 	url, err := r.Cli.Get(fmt.Sprintf(ShortlinkKey, eid)).Result()
 	if err == redis.Nil {

@@ -6,16 +6,19 @@ import (
 	"strconv"
 )
 
+// RedisEnv contains redis addr, password and db
 type RedisEnv struct {
 	Addr     string
 	Password string
 	DB       int
 }
 
+// AppEnv contains app addr
 type AppEnv struct {
 	Addr string
 }
 
+// GetRedisEnv returns a RedisEnv
 func GetRedisEnv() RedisEnv {
 	addr := os.Getenv("APP_REDIS_ADDR")
 	if addr == "" {
@@ -43,6 +46,7 @@ func GetRedisEnv() RedisEnv {
 	}
 }
 
+// GetAppEnv returns a AppEnv
 func GetAppEnv() AppEnv {
 	addr := os.Getenv("APP_ADDR")
 	if addr == "" {

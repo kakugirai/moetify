@@ -3,6 +3,9 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"github.com/kakugirai/moetify/app/error"
 	"github.com/kakugirai/moetify/app/handler"
@@ -11,16 +14,16 @@ import (
 	"github.com/kakugirai/moetify/config"
 	"github.com/urfave/negroni"
 	"gopkg.in/validator.v2"
-	"log"
-	"net/http"
 )
 
+// App contains router, middleware and redis
 type App struct {
 	Router      *mux.Router
 	Middlewares *middleware.Middleware
 	RS          model.RedisStorage
 }
 
+// Initialize app
 func (a *App) Initialize(e config.RedisEnv) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	addr, passwd, db := config.GetRedisEnv().Addr, config.GetRedisEnv().Password, config.GetRedisEnv().DB
@@ -31,6 +34,7 @@ func (a *App) Initialize(e config.RedisEnv) {
 	a.InitializeRoutes()
 }
 
+// InitializeRoutes initialize routes
 func (a App) InitializeRoutes() {
 	a.Router.HandleFunc("/api/shorten", a.createShortlink).Methods("POST")
 	a.Router.HandleFunc("/api/info", a.getShortlinkInfo).Methods("GET")
@@ -96,6 +100,7 @@ func (a *App) redirect(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Run negroni
 func (a *App) Run(addr string) {
 	n := negroni.New()
 	//n.Use(negroni.HandlerFunc(a.Middlewares.LoggingHandler))

@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Middleware is a custom middleware
 type Middleware struct {
 }
 
