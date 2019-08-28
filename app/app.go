@@ -3,9 +3,6 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-
 	"github.com/gorilla/mux"
 	"github.com/kakugirai/moetify/app/error"
 	"github.com/kakugirai/moetify/app/handler"
@@ -14,6 +11,8 @@ import (
 	"github.com/kakugirai/moetify/config"
 	"github.com/urfave/negroni"
 	"gopkg.in/validator.v2"
+	"log"
+	"net/http"
 )
 
 // App contains router, middleware and redis
@@ -54,16 +53,16 @@ func (a *App) createShortlink(w http.ResponseWriter, r *http.Request) {
 	var req shortenReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		handler.RespondWithError(w, error.StatusError{
-			http.StatusBadRequest,
-			fmt.Errorf("parse parameters failed %v", r.Body),
+			Code: http.StatusBadRequest,
+			Err:  fmt.Errorf("parse parameters failed %v", r.Body),
 		}, nil)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
 		handler.RespondWithError(w, error.StatusError{
-			http.StatusBadRequest,
-			fmt.Errorf("validate parameters failed %v", req),
+			Code: http.StatusBadRequest,
+			Err:  fmt.Errorf("validate parameters failed %v", req),
 		}, nil)
 		return
 	}
