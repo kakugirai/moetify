@@ -25,10 +25,10 @@ func (a *App) Initialize(e config.RedisEnv) {
 
 	addr, passwd, db := config.GetRedisEnv().Addr, config.GetRedisEnv().Password, config.GetRedisEnv().DB
 	log.Printf("connect to redis (addr: %s, password: %s, db: %d)", addr, passwd, db)
-	
+
 	// Let the handler control Redis conn
 	a.Handler = &handler.Handler{
-		RS = model.NewRedisCli(addr, passwd, db)
+		RS: model.NewRedisCli(addr, passwd, db),
 	}
 	a.Router = mux.NewRouter()
 	a.Middlewares = &middleware.Middleware{}

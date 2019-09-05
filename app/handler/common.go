@@ -69,9 +69,11 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 
 // GetShortlinkInfo responds the link info
 func (h *Handler) GetShortlinkInfo(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
 	vals := r.URL.Query()
 	s := vals.Get("shortlink")
-	d, err := RS.ShortLinkInfo(s)
+	d, err := h.RS.ShortLinkInfo(s)
 	if err != nil {
 		respondWithError(w, nil, err)
 	} else {
@@ -85,40 +87,36 @@ func (h *Handler) GetShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 
 // Redirect redirects from shortlink to full link
 func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
 	vars := mux.Vars(r)
-	u, err := RS.Unshorten(vars["shortlink"])
+
+	d, err := h.RS.ShortLinkInfo(vars["shortlink"])
 	if err != nil {
-		respondWithError(w, nil, err)
+		respondWithError(w, err, nil)
 	} else {
-		http.Redirect(w, r, u, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, d.Full, http.StatusTemporaryRedirect)
 	}
 }
 
 // RespondWithError writes response with error
-func respondWithError(w http.ResponseWriter, err myerror.StatusError, payload interface{}) {
-
-	var resp []byte
+func respondWithError(w http.ResponseWriter, err error, payload interface{}) {
+	var resp Response
 
 	switch e := err.(type) {
-	case myerror.StatusError:
+	case myerror.Error:
 		log.Printf("HTTP %d - %s\n", e.Status(), e)
-		resp, err := json.Marshal(Response{
+		resp = Response{
 			Code:    e.Status(),
 			Message: e.Error(),
 			Content: payload,
-		})
-		if err != nil {
-			log.Fatalln(err)
 		}
 		break
 	default:
-		resp, err := json.Marshal(Response{
+		resp = Response{
 			Code:    http.StatusInternalServerError,
 			Message: http.StatusText(http.StatusInternalServerError),
 			Content: payload,
-		})
-		if err != nil {
-			log.Fatalln(err)
 		}
 		break
 	}
