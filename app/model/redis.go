@@ -1,12 +1,11 @@
 package model
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"time"
 
-	myerror "moetify/app/error"
+	myerror "github.com/kakugirai/moetify/app/error"
 
 	"github.com/go-redis/redis"
 	"github.com/speps/go-hashids"
@@ -58,8 +57,11 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	// convert url to sha1 hash
 	h := toHash(url)
 
+	log.Println("hashed", h)
+
 	// Only retrive the short URL. No need full or detail
 	hres, err := r.Cli.HGet(url, "short").Result()
+	log.Println("hget", hres, err)
 	if err == redis.Nil {
 		// nop
 	} else if err != nil {
@@ -69,12 +71,12 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	}
 
 	// Create a expiration time variable so that SETEX wouldn't cause millisecond delay from individual SETs
-	expireAt := time.Duration(exp)
+	expireAt := time.Duration(exp) * time.Minute
 	mapcontent := map[string]interface{}{
 		"short":                 h,
 		"full":                  url,
 		"created_at":            time.Now().String(),
-		"expiration_in_minutes": expireAt,
+		"expiration_in_minutes": expireAt.String(),
 	}
 
 	batch := func(tx *redis.Tx) error {
@@ -107,15 +109,20 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	}
 
 	err = r.Cli.Watch(batch, h, url)
-	if err != redis.TxFailedErr {
+	log.Println("Watch", err)
+	if err == redis.TxFailedErr {
 		return "", err
 	}
+
+	log.Println("watched", err)
+
 	return h, nil
 }
 
 // ShortLinkInfo gets ShortlinkDetailKey from redis
 func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
-	hres, err := r.Cli.HGetAll(eid).Result()
+	hres, err := r.Cli.HMGet(eid, "short", "full", "created_at", "expiration_in_minutes").Result() //r.Cli.HGetAll(eid).Result()
+	log.Println("hmget", hres, err)
 	if err == redis.Nil {
 		return nil, myerror.StatusError{
 			Code: 404,
@@ -125,17 +132,19 @@ func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 		return nil, err
 	}
 
-	var sli DetailInfo
+	expinmin, err := time.ParseDuration(hres[3].(string))
+	if err != nil {
+		log.Fatalln("ParseDuration", err)
+	}
 
-	tmp, err := json.Marshal(hres)
-	if err != nil {
-		return nil, err
+	sli := &DetailInfo{
+		Short:               hres[0].(string),
+		Full:                hres[1].(string),
+		CreatedAt:           hres[2].(string),
+		ExpirationInMinutes: expinmin / time.Minute,
 	}
-	err = json.Unmarshal(tmp, &sli)
-	if err != nil {
-		return nil, err
-	}
-	return &sli, nil
+
+	return sli, nil
 }
 
 // Unshorten gets ShortlinkKey from redis

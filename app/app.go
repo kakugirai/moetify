@@ -3,10 +3,10 @@ package app
 import (
 	"log"
 
-	"moetify/app/handler"
-	"moetify/app/middleware"
-	"moetify/app/model"
-	"moetify/config"
+	"github.com/kakugirai/moetify/app/handler"
+	"github.com/kakugirai/moetify/app/middleware"
+	"github.com/kakugirai/moetify/app/model"
+	"github.com/kakugirai/moetify/config"
 
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
@@ -39,7 +39,7 @@ func (a *App) Initialize(e config.RedisEnv) {
 func (a App) InitializeRoutes() {
 	a.Router.HandleFunc("/api/shorten", a.Handler.CreateShortlink).Methods("POST")
 	a.Router.HandleFunc("/api/info", a.Handler.GetShortlinkInfo).Methods("GET")
-	a.Router.HandleFunc("/{shortlink:[a-zA-Z0-9]{1,11}}", a.Handler.Redirect).Methods("GET")
+	a.Router.HandleFunc("/{shortlink:[a-zA-Z0-9]{1,12}}", a.Handler.Redirect).Methods("GET")
 }
 
 // Run negroni

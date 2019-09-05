@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
-	myerror "moetify/app/error"
-	"moetify/app/model"
+	myerror "github.com/kakugirai/moetify/app/error"
+	"github.com/kakugirai/moetify/app/model"
 
 	"github.com/gorilla/mux"
 	"gopkg.in/validator.v2"
@@ -40,6 +41,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 
 	var req shortenReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println("Bad decode")
 		respondWithError(w, myerror.StatusError{
 			Code: http.StatusBadRequest,
 			Err:  fmt.Errorf("parse parameters failed %v", r.Body),
@@ -48,6 +50,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validator.Validate(req); err != nil {
+		log.Println("Bad validation")
 		respondWithError(w, myerror.StatusError{
 			Code: http.StatusBadRequest,
 			Err:  fmt.Errorf("validate parameters failed %v", req),
@@ -57,6 +60,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 
 	s, err := h.RS.Shorten(req.URL, req.ExpirationInMinutes)
 	if err != nil {
+		log.Println("Bad shorten")
 		respondWithError(w, nil, err)
 	} else {
 		respondJSON(w, Response{
@@ -73,9 +77,12 @@ func (h *Handler) GetShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 
 	vals := r.URL.Query()
 	s := vals.Get("shortlink")
+
+	log.Println("shortlink is ", s)
+
 	d, err := h.RS.ShortLinkInfo(s)
 	if err != nil {
-		respondWithError(w, nil, err)
+		respondWithError(w, err, nil)
 	} else {
 		respondJSON(w, Response{
 			Code:    http.StatusOK,
@@ -95,8 +102,15 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, err, nil)
 	} else {
-		http.Redirect(w, r, d.Full, http.StatusTemporaryRedirect)
+		u, err := url.Parse(d.Full)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		// Make sure the redirect URL is absolute instead of relative
+		u.Scheme = "http"
+		http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 	}
+
 }
 
 // RespondWithError writes response with error
