@@ -1,25 +1,14 @@
 package model
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/go-redis/redis"
-	myerror "github.com/kakugirai/moetify/app/error"
-	"github.com/mattheath/base62"
-	"github.com/speps/go-hashids"
+	"log"
 	"time"
-)
 
-const (
-	// URLIDKEY is the global counter
-	URLIDKEY = "next.url.id"
-	// ShortlinkKey maps the shortlint to the original URL
-	ShortlinkKey = "shortlink:%s:url"
-	// URLHashKey maps the hash of the URL to the shortlink
-	URLHashKey = "urlhashkey:%s:url"
-	// ShortlinkDetailKey map the shortlink and URL info
-	ShortlinkDetailKey = "shortlink:%s:detail"
+	myerror "github.com/kakugirai/moetify/app/error"
+
+	"github.com/go-redis/redis"
+	"github.com/speps/go-hashids"
 )
 
 // RedisCli is a redis client
@@ -27,9 +16,10 @@ type RedisCli struct {
 	Cli *redis.Client
 }
 
-// URLDetail contains the detail of the shortlink
-type URLDetail struct {
-	URL                 string        `json:"URL"`
+// DetailInfo contains the detail of the shortlink
+type DetailInfo struct {
+	Short               string        `json:"short"`
+	Full                string        `json:"full"`
 	CreatedAt           string        `json:"created_at"`
 	ExpirationInMinutes time.Duration `json:"expiration_in_minutes"`
 }
@@ -60,83 +50,99 @@ func toHash(url string) string {
 func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	// convert url to sha1 hash
 	h := toHash(url)
+	//log.Println("hashed", h)
 
-	// fetch it if url is cached
-	d, err := r.Cli.Get(fmt.Sprintf(URLHashKey, h)).Result()
+	// Only retrieve the short URL. No need full or detail
+	hres, err := r.Cli.HGet(url, "short").Result()
+	//log.Println("hget", hres, err)
 	if err == redis.Nil {
-		// cache doesn't exist, do nothing
+		// nop
 	} else if err != nil {
-		return "", err
+		log.Fatalln(err)
 	} else {
-		if d == "{}" {
-			// expiration, do nothing
-		} else {
-			return d, nil
+		return hres, nil
+	}
+
+	// Create a expiration time variable so that SETEX wouldn't cause millisecond delay from individual SETs
+	expireAt := time.Duration(exp) * time.Minute
+	m := map[string]interface{}{
+		"short":                 h,
+		"full":                  url,
+		"created_at":            time.Now().String(),
+		"expiration_in_minutes": expireAt.String(),
+	}
+
+	batch := func(tx *redis.Tx) error {
+		// Queue HMSETs
+		err = tx.HMSet(h, m).Err()
+		if err != nil {
+			return err
 		}
+		err = tx.Expire(h, expireAt).Err()
+		if err != nil {
+			return err
+		}
+
+		err = tx.HMSet(url, m).Err()
+		if err != nil {
+			return err
+		}
+		err = tx.Expire(url, expireAt).Err()
+		if err != nil {
+			return err
+		}
+
+		// Exec
+		//_, err = tx.Pipelined(func(pipe redis.Pipeliner) error {
+		//	// Dunno what to do here.
+		//	return nil
+		//})
+
+		return nil
 	}
 
-	// increase the global counter
-	err = r.Cli.Incr(URLIDKEY).Err()
-	if err != nil {
+	err = r.Cli.Watch(batch, h, url)
+	//log.Println("Watch", err)
+	if err == redis.TxFailedErr {
 		return "", err
 	}
 
-	// encode global counter to base62
-	id, err := r.Cli.Get(URLIDKEY).Int64()
-	if err != nil {
-		return "", err
-	}
-	eid := base62.EncodeInt64(id)
-
-	// store the encoded id
-	err = r.Cli.Set(fmt.Sprintf(ShortlinkKey, eid), url, time.Minute*time.Duration(exp)).Err()
-	if err != nil {
-		return "", err
-	}
-
-	// store the hash of url
-	err = r.Cli.Set(fmt.Sprintf(URLHashKey, h), eid, time.Minute*time.Duration(exp)).Err()
-	if err != nil {
-		return "", err
-	}
-
-	detail, err := json.Marshal(&URLDetail{
-		URL:                 url,
-		CreatedAt:           time.Now().String(),
-		ExpirationInMinutes: time.Duration(exp),
-	})
-	if err != nil {
-		return "", err
-	}
-
-	// store the detail
-	err = r.Cli.Set(fmt.Sprintf(ShortlinkDetailKey, eid), detail, time.Minute*time.Duration(exp)).Err()
-	if err != nil {
-		return "", err
-	}
-	return eid, nil
+	//log.Println("watched", err)
+	return h, nil
 }
 
 // ShortLinkInfo gets ShortlinkDetailKey from redis
-func (r *RedisCli) ShortLinkInfo(eid string) (interface{}, error) {
-	d, err := r.Cli.Get(fmt.Sprintf(ShortlinkDetailKey, eid)).Result()
-	if err == redis.Nil {
-		return "", myerror.StatusError{Code: 404, Err: errors.New("unknown short URL")}
-	} else if err != nil {
-		return "", err
-	} else {
-		return d, nil
-	}
-}
+func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 
-// Unshorten gets ShortlinkKey from redis
-func (r *RedisCli) Unshorten(eid string) (string, error) {
-	url, err := r.Cli.Get(fmt.Sprintf(ShortlinkKey, eid)).Result()
+	hres, err := r.Cli.HGetAll(eid).Result()
+	//r.Cli.HMGet(eid, "short", "full", "created_at", "expiration_in_minutes").Result() //r.Cli.HGetAll(eid).Result()
+	//log.Println("hmget", hres, err)
+	// Check if HMGET result is nil
 	if err == redis.Nil {
-		return "", myerror.StatusError{Code: 404, Err: errors.New("unknown URL")}
+		return nil, myerror.StatusError{
+			Code: 404,
+			Err:  errors.New("unknown short URL"),
+		}
 	} else if err != nil {
-		return "", err
-	} else {
-		return url, nil
+		return nil, err
+	} else if len(hres) == 0 {
+		return nil, myerror.StatusError{
+			Code: 404,
+			Err:  errors.New("unknown short URL"),
+		}
 	}
+
+	exp, err := time.ParseDuration(hres["expiration_in_minutes"])
+	if err != nil {
+		log.Fatalln("ParseDuration", err)
+	}
+
+	sli := &DetailInfo{
+		Short:               hres["short"],
+		Full:                hres["full"],
+		CreatedAt:           hres["created_at"],
+		ExpirationInMinutes: exp / time.Minute,
+	}
+
+	return sli, nil
 }
