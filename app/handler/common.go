@@ -78,7 +78,7 @@ func (h *Handler) GetShortlinkInfo(w http.ResponseWriter, r *http.Request) {
 	vals := r.URL.Query()
 	s := vals.Get("shortlink")
 
-	log.Println("shortlink is ", s)
+	//log.Println("shortlink is ", s)
 
 	d, err := h.RS.ShortLinkInfo(s)
 	if err != nil {
@@ -107,10 +107,10 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 			log.Fatalln(err)
 		}
 		// Make sure the redirect URL is absolute instead of relative
+		// FIXME: should not hard coding http
 		u.Scheme = "http"
 		http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 	}
-
 }
 
 // RespondWithError writes response with error

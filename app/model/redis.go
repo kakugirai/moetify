@@ -16,13 +16,7 @@ type RedisCli struct {
 	Cli *redis.Client
 }
 
-// URLDetail contains the detail of the shortlink
-type URLDetail struct {
-	URL                 string        `json:"URL"`
-	CreatedAt           string        `json:"created_at"`
-	ExpirationInMinutes time.Duration `json:"expiration_in_minutes"`
-}
-
+// DetailInfo contains the detail of the shortlink
 type DetailInfo struct {
 	Short               string        `json:"short"`
 	Full                string        `json:"full"`
@@ -56,12 +50,11 @@ func toHash(url string) string {
 func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 	// convert url to sha1 hash
 	h := toHash(url)
+	//log.Println("hashed", h)
 
-	log.Println("hashed", h)
-
-	// Only retrive the short URL. No need full or detail
+	// Only retrieve the short URL. No need full or detail
 	hres, err := r.Cli.HGet(url, "short").Result()
-	log.Println("hget", hres, err)
+	//log.Println("hget", hres, err)
 	if err == redis.Nil {
 		// nop
 	} else if err != nil {
@@ -72,7 +65,7 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 
 	// Create a expiration time variable so that SETEX wouldn't cause millisecond delay from individual SETs
 	expireAt := time.Duration(exp) * time.Minute
-	mapcontent := map[string]interface{}{
+	m := map[string]interface{}{
 		"short":                 h,
 		"full":                  url,
 		"created_at":            time.Now().String(),
@@ -81,7 +74,7 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 
 	batch := func(tx *redis.Tx) error {
 		// Queue HMSETs
-		err = tx.HMSet(h, mapcontent).Err()
+		err = tx.HMSet(h, m).Err()
 		if err != nil {
 			return err
 		}
@@ -90,7 +83,7 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 			return err
 		}
 
-		err = tx.HMSet(url, mapcontent).Err()
+		err = tx.HMSet(url, m).Err()
 		if err != nil {
 			return err
 		}
@@ -100,22 +93,21 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 		}
 
 		// Exec
-		_, err = tx.Pipelined(func(pipe redis.Pipeliner) error {
-			// Dunno what to do here.
-			return nil
-		})
+		//_, err = tx.Pipelined(func(pipe redis.Pipeliner) error {
+		//	// Dunno what to do here.
+		//	return nil
+		//})
 
-		return err
+		return nil
 	}
 
 	err = r.Cli.Watch(batch, h, url)
-	log.Println("Watch", err)
+	//log.Println("Watch", err)
 	if err == redis.TxFailedErr {
 		return "", err
 	}
 
-	log.Println("watched", err)
-
+	//log.Println("watched", err)
 	return h, nil
 }
 
@@ -124,7 +116,7 @@ func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 
 	hres, err := r.Cli.HGetAll(eid).Result()
 	//r.Cli.HMGet(eid, "short", "full", "created_at", "expiration_in_minutes").Result() //r.Cli.HGetAll(eid).Result()
-	log.Println("hmget", hres, err)
+	//log.Println("hmget", hres, err)
 	// Check if HMGET result is nil
 	if err == redis.Nil {
 		return nil, myerror.StatusError{
@@ -140,7 +132,7 @@ func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 		}
 	}
 
-	expinmin, err := time.ParseDuration(hres["expiration_in_minutes"])
+	exp, err := time.ParseDuration(hres["expiration_in_minutes"])
 	if err != nil {
 		log.Fatalln("ParseDuration", err)
 	}
@@ -149,7 +141,7 @@ func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 		Short:               hres["short"],
 		Full:                hres["full"],
 		CreatedAt:           hres["created_at"],
-		ExpirationInMinutes: expinmin / time.Minute,
+		ExpirationInMinutes: exp / time.Minute,
 	}
 
 	return sli, nil
