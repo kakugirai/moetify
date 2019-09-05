@@ -1,10 +1,10 @@
 package error
 
 // Error is a custom error
-type Error interface {
-	error
-	Status() int
-}
+// type Error interface {
+// 	error
+// 	Status() int
+// }
 
 // StatusError contains HTTP status error
 type StatusError struct {
