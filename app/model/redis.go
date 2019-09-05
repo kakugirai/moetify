@@ -121,8 +121,11 @@ func (r *RedisCli) Shorten(url string, exp int64) (string, error) {
 
 // ShortLinkInfo gets ShortlinkDetailKey from redis
 func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
-	hres, err := r.Cli.HMGet(eid, "short", "full", "created_at", "expiration_in_minutes").Result() //r.Cli.HGetAll(eid).Result()
+
+	hres, err := r.Cli.HGetAll(eid).Result()
+	//r.Cli.HMGet(eid, "short", "full", "created_at", "expiration_in_minutes").Result() //r.Cli.HGetAll(eid).Result()
 	log.Println("hmget", hres, err)
+	// Check if HMGET result is nil
 	if err == redis.Nil {
 		return nil, myerror.StatusError{
 			Code: 404,
@@ -130,39 +133,24 @@ func (r *RedisCli) ShortLinkInfo(eid string) (*DetailInfo, error) {
 		}
 	} else if err != nil {
 		return nil, err
+	} else if len(hres) == 0 {
+		return nil, myerror.StatusError{
+			Code: 404,
+			Err:  errors.New("unknown short URL"),
+		}
 	}
 
-	expinmin, err := time.ParseDuration(hres[3].(string))
+	expinmin, err := time.ParseDuration(hres["expiration_in_minutes"])
 	if err != nil {
 		log.Fatalln("ParseDuration", err)
 	}
 
 	sli := &DetailInfo{
-		Short:               hres[0].(string),
-		Full:                hres[1].(string),
-		CreatedAt:           hres[2].(string),
+		Short:               hres["short"],
+		Full:                hres["full"],
+		CreatedAt:           hres["created_at"],
 		ExpirationInMinutes: expinmin / time.Minute,
 	}
 
 	return sli, nil
 }
-
-// Unshorten gets ShortlinkKey from redis
-// func (r *RedisCli) Unshorten(eid string) (string, error) {
-
-// 	hres, err := r.Cli.HGet(eid).Result()
-// 	if err == redis.Nil {
-// 		return "", myerror.StatusError{Code: 404, Err: errors.New("unknown URL")}
-// 	} else if err != nil {
-
-// 	}
-
-// 	url, err := r.Cli.Get(eid).Result()
-// 	if err == redis.Nil {
-// 		return "", myerror.StatusError{Code: 404, Err: errors.New("unknown URL")}
-// 	} else if err != nil {
-// 		return "", err
-// 	} else {
-// 		return url, nil
-// 	}
-// }
