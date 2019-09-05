@@ -41,7 +41,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 
 	var req shortenReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Println("Bad decode")
+		//log.Println("Bad decode")
 		respondWithError(w, myerror.StatusError{
 			Code: http.StatusBadRequest,
 			Err:  fmt.Errorf("parse parameters failed %v", r.Body),
@@ -50,7 +50,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validator.Validate(req); err != nil {
-		log.Println("Bad validation")
+		//log.Println("Bad validation")
 		respondWithError(w, myerror.StatusError{
 			Code: http.StatusBadRequest,
 			Err:  fmt.Errorf("validate parameters failed %v", req),
@@ -60,7 +60,7 @@ func (h *Handler) CreateShortlink(w http.ResponseWriter, r *http.Request) {
 
 	s, err := h.RS.Shorten(req.URL, req.ExpirationInMinutes)
 	if err != nil {
-		log.Println("Bad shorten")
+		//log.Println("Bad shorten")
 		respondWithError(w, nil, err)
 	} else {
 		respondJSON(w, Response{
@@ -143,7 +143,7 @@ func respondJSON(w http.ResponseWriter, response Response) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	w.WriteHeader(response.Code)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	w.WriteHeader(response.Code)
+	_, _ = w.Write(resp)
 }
