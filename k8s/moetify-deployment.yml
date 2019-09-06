@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: moetify-app
-          image: kakugirai/moetify:latest
+          image: gcr.io/moetify/moetify
           imagePullPolicy: IfNotPresent
           resources:
             requests:
